@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CoopPlay â€” BASE Unificado (solo rectÃ¡ngulos)</title>
+  <style>
+    :root{
+      --ui-bg: rgba(12,12,16,0.94);
+      --ui-accent: #ffd36a;
+      --ui-border: #caa24e;
+      --tile-w: 64;
+      --tile-h: 32;
+      --game-size: 640px;
+    }
+    html,body{
+      height:100%;
+      margin:0;
+      background:#0c0c10;
+      color:#e9dec5;
+      font-family:'Courier New',monospace;
+    }
+    *{box-sizing:border-box;}
+
+    /* Game container */
+    #gameContainer{
+      margin:16px auto;
+      position:relative;
+      width:min(92vw,var(--game-size));
+      height:min(92vw,var(--game-size));
+    }
+    #gameCanvas{
+      width:100%;
+      height:100%;
+      border:2px solid var(--ui-accent);
+      image-rendering:pixelated;
+      background:#181818;
+    }
+    #controls{
+      position:absolute;
+      left:10px;
+      bottom:10px;
+      background:rgba(0,0,0,.7);
+      color:#fff;
+      padding:8px;
+      border:2px solid #888;
+    }
+
+    /* Sistema de inventario y barras */
+    #inventoryModal{
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      width:700px;
+      min-height:500px;
+      background:rgba(12,12,16,.98);
+      border:4px solid #222;
+      box-shadow:0 8px 30px rgba(0,0,0,.6);
+      display:none;
+      z-index:300;
+      padding:20px;
+      border-radius:8px;
+      color:#fff;
+    }
+
+    .inventory-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:20px;
+      border-bottom:2px solid #444;
+      padding-bottom:10px;
+    }
+
+    .inventory-content{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:20px;
+    }
+
+    .stats-panel{
+      background:rgba(20,20,25,0.8);
+      padding:15px;
+      border:2px solid #333;
+      border-radius:5px;
+    }
+
+    .stats-title{
+      color:#ffd36a;
+      font-weight:bold;
+      margin-bottom:15px;
+      text-align:center;
+      font-size:16px;
+    }
+
+    .stat-row{
+      display:flex;
+      align-items:center;
+      margin-bottom:12px;
+      gap:10px;
+    }
+
+    .stat-label{
+      min-width:100px;
+      font-size:12px;
+      color:#ccc;
+    }
+
+    .stat-bar-container{
+      flex:1;
+      height:20px;
+      background:#333;
+      border:1px solid #555;
+      border-radius:10px;
+      overflow:hidden;
+      position:relative;
+    }
+
+    .stat-bar{
+      height:100%;
+      transition:width 0.3s ease;
+      border-radius:10px;
+    }
+
+    .stat-value{
+      position:absolute;
+      top:50%;
+      left:50%;
+      transform:translate(-50%,-50%);
+      font-size:10px;
+      font-weight:bold;
+      color:#000;
+      text-shadow:0 0 2px #fff;
+    }
+
+    /* Colores para cada barra */
+    .salud-bar{ background:linear-gradient(90deg, #ff4444, #ff6666); }
+    .conocimiento-bar{ background:linear-gradient(90deg, #4444ff, #6666ff); }
+    .agilidad-bar{ background:linear-gradient(90deg, #44ff44, #66ff66); }
+    .estamina-bar{ background:linear-gradient(90deg, #ffff44, #ffff66); }
+    .suerte-bar{ background:linear-gradient(90deg, #ff44ff, #ff66ff); }
+    .sueno-bar{ background:linear-gradient(90deg, #44ffff, #66ffff); }
+
+    .inventory-grid{
+      display:grid;
+      grid-template-columns:repeat(6,50px);
+      gap:8px;
+      justify-content:center;
+    }
+
+    .inventory-slot{
+      width:50px;
+      height:50px;
+      background:linear-gradient(#333,#222);
+      border:2px solid rgba(255,255,255,0.1);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      border-radius:4px;
+    }
+
+    .inventory-slot.empty{
+      opacity:0.4;
+    }
+
+    .inventory-slot:hover{
+      border-color:#ffd36a;
+    }
+
+    .close-btn{
+      background:#ff4444;
+      color:#fff;
+      border:none;
+      padding:10px 20px;
+      cursor:pointer;
+      border-radius:5px;
+      font-weight:bold;
+    }
+
+    /* Alertas del sistema */
+    .alert-overlay{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,0.8);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:1000;
+    }
+
+    .alert-box{
+      background:rgba(12,12,16,0.95);
+      border:3px solid #ff4444;
+      padding:30px;
+      border-radius:10px;
+      text-align:center;
+      color:#fff;
+      max-width:400px;
+    }
+
+    .alert-title{
+      color:#ff4444;
+      font-size:18px;
+      font-weight:bold;
+      margin-bottom:15px;
+    }
+
+    .alert-btn{
+      background:#ffd36a;
+      color:#000;
+      border:none;
+      padding:10px 20px;
+      cursor:pointer;
+      border-radius:5px;
+      font-weight:bold;
+      margin:5px;
+    }
+
+    /* Debug info */
+    .debug-info{
+      position:absolute;
+      top:10px;
+      right:10px;
+      background:rgba(0,0,0,0.8);
+      color:#fff;
+      padding:10px;
+      font-size:10px;
+      border:1px solid #444;
+    }
+
+    .action-buttons{
+      margin-top:20px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      justify-content:center;
+    }
+
+    .action-btn{
+      background:#ffd36a;
+      color:#000;
+      border:none;
+      padding:8px 15px;
+      cursor:pointer;
+      border-radius:5px;
+      font-size:11px;
+      font-weight:bold;
+    }
+
+    .action-btn:hover{
+      background:#e6c25f;
+    }
+
+    .action-btn:disabled{
+      background:#666;
+      color:#999;
+      cursor:not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="640" height="640"></canvas>
+    
+    <div id="controls">
+      <strong>Controles:</strong> WASD/Flechas moverse Â· E inventario/interactuar Â· ESC pausa
+    </div>
+
+    <!-- Debug Info -->
+    <div class="debug-info" id="debugInfo">
+      Tiempo transcurrido: <span id="gameTime">0</span>s<br>
+      Ãšltima actividad: <span id="lastActivity">Ninguna</span><br>
+      Estado: <span id="gameStateDebug">jugando</span>
+    </div>
+
+    <!-- Sistema de inventario con barras -->
+    <div id="inventoryModal" role="dialog" aria-hidden="true">
+      <div class="inventory-header">
+        <h2 style="margin:0;color:#ffd36a;">ðŸ“Š Estado del Jugador</h2>
+        <button class="close-btn" onclick="closeInventory()">Cerrar</button>
+      </div>
+      
+      <div class="inventory-content">
+        <!-- Panel de estadÃ­sticas -->
+        <div class="stats-panel">
+          <div class="stats-title">ðŸƒâ€â™‚ï¸ Barras de Estado</div>
+          
+          <div class="stat-row">
+            <div class="stat-label">â¤ï¸ Salud:</div>
+            <div class="stat-bar-container">
+              <div class="stat-bar salud-bar" id="saludBar" style="width:100%"></div>
+              <div class="stat-value" id="saludValue">100%</div>
+            </div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat-label">ðŸ§  Conocimiento:</div>
+            <div class="stat-bar-container">
+              <div class="stat-bar conocimiento-bar" id="conocimientoBar" style="width:100%"></div>
+              <div class="stat-value" id="conocimientoValue">100%</div>
+            </div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat-label">âš¡ Agilidad:</div>
+            <div class="stat-bar-container">
+              <div class="stat-bar agilidad-bar" id="agilidadBar" style="width:100%"></div>
+              <div class="stat-value" id="agilidadValue">100%</div>
+            </div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat-label">ðŸ’ª Estamina:</div>
+            <div class="stat-bar-container">
+              <div class="stat-bar estamina-bar" id="estaminaBar" style="width:100%"></div>
+              <div class="stat-value" id="estaminaValue">100%</div>
+            </div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat-label">ðŸ€ Suerte:</div>
+            <div class="stat-bar-container">
+              <div class="stat-bar suerte-bar" id="suerteBar" style="width:100%"></div>
+              <div class="stat-value" id="suerteValue">100%</div>
+            </div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat-label">ðŸ˜´ SueÃ±o:</div>
+            <div class="stat-bar-container">
+              <div class="stat-bar sueno-bar" id="suenoBar" style="width:100%"></div>
+              <div class="stat-value" id="suenoValue">100%</div>
+            </div>
+          </div>
+
+          <!-- Botones de acciÃ³n -->
+          <div class="action-buttons">
+            <button class="action-btn" onclick="estudiar()" id="estudiarBtn">ðŸ“š Estudiar</button>
+            <button class="action-btn" onclick="jugarVideojuegos()" id="jugarBtn">ðŸŽ® Jugar</button>
+            <button class="action-btn" onclick="dormir()" id="dormirBtn">ðŸ›ï¸ Dormir</button>
+            <button class="action-btn" onclick="trabajar()" id="trabajarBtn">ðŸ’¼ Trabajar</button>
+            <button class="action-btn" onclick="usarBotiquin()" id="botiquinBtn">ðŸ¥ Usar BotiquÃ­n</button>
+            <button class="action-btn" onclick="tomarEnergetico()" id="energeticoBtn">âš¡ EnergÃ©tico</button>
+          </div>
+        </div>
+
+        <!-- Panel de inventario -->
+        <div class="stats-panel">
+          <div class="stats-title">ðŸŽ’ Inventario</div>
+          <div class="inventory-grid" id="inventoryGrid">
+            <!-- Slots generados dinÃ¡micamente -->
+          </div>
+          <div style="margin-top:15px;font-size:11px;color:#999;text-align:center;">
+            Objetos disponibles: <span id="itemCount">3</span>/18
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sistema de alertas -->
+    <div class="alert-overlay" id="alertOverlay">
+      <div class="alert-box">
+        <div class="alert-title" id="alertTitle">âš ï¸ Alerta</div>
+        <div id="alertMessage">Mensaje de alerta</div>
+        <div style="margin-top:20px;">
+          <button class="alert-btn" onclick="closeAlert()" id="alertCloseBtn">Cerrar</button>
+          <button class="alert-btn" style="background:#44ff44;" onclick="handleAlertAction()" id="alertActionBtn" style="display:none;">AcciÃ³n</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== SISTEMA DE ESTADO GLOBAL =====
+    let gameTime = 0;
+    let lastActivityTime = 0;
+    let gameState = 'playing';
+    
+    // Sistema de barras de estado (todas empiezan en 100%)
+    let playerStats = {
+      salud: 100,
+      conocimiento: 100,
+      agilidad: 100,
+      estamina: 100,
+      suerte: 100,
+      sueno: 100  // 100% = sin sueÃ±o, 0% = mucho sueÃ±o
+    };
+
+    // Inventario bÃ¡sico
+    let inventory = [
+      {name: 'BotiquÃ­n', type: 'healing', color: '#ff4444', count: 2},
+      {name: 'EnergÃ©tico', type: 'energy', color: '#ffff44', count: 1},
+      {name: 'Libro', type: 'study', color: '#4444ff', count: 1}
+    ];
+
+    // ===== SISTEMA DE CANVAS Y JUEGO =====
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    
+    const ROOM_SIZE = 640;
+    const WALL = 32;
+    
+    let keys = {};
+    const player = { 
+      x: WALL + 60, 
+      y: ROOM_SIZE - WALL - 120, 
+      width: 28, 
+      height: 36, 
+      speed: 2, 
+      facing: 'down' 
+    };
+
+    let roomObjects = [
+      {x: 320-80, y: 320-50, width:160, height:100, type:'bed', name:'Cama'},
+      {x: 320-130, y: 320-30, width:45, height:45, type:'nightstand', name:'Mesa de Noche'},
+      {x: ROOM_SIZE-100, y: 60, width:65, height:120, type:'wardrobe', name:'Armario'},
+      {x: ROOM_SIZE-140, y: ROOM_SIZE-120, width:105, height:55, type:'desk', name:'Escritorio'},
+      {x: 320-40, y:40, width:80, height:60, type:'picture', name:'Cuadro Familiar'},
+      {x: 32, y: 320-40, width:8, height:80, type:'door', name:'Puerta'}
+    ];
+
+    // ===== SISTEMA DE INPUT =====
+    document.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if(gameState === 'playing') keys[k] = true;
+      
+      if(k === 'e') {
+        if(gameState === 'playing') {
+          checkInteractions();
+        } else if(gameState === 'inventory') {
+          closeInventory();
+        }
+      }
+      
+      if(e.key === 'Escape') {
+        if(gameState === 'inventory') closeInventory();
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      keys[e.key.toLowerCase()] = false;
+    });
+
+    // ===== SISTEMA DE ACTUALIZACIÃ“N DE BARRAS =====
+    function updateStatBars() {
+      // Actualizar visualizaciÃ³n de barras
+      Object.keys(playerStats).forEach(stat => {
+        const value = Math.max(0, Math.min(100, playerStats[stat]));
+        const bar = document.getElementById(stat + 'Bar');
+        const valueDisplay = document.getElementById(stat + 'Value');
+        
+        if(bar && valueDisplay) {
+          bar.style.width = value + '%';
+          valueDisplay.textContent = Math.round(value) + '%';
+        }
+      });
+
+      // Verificar estados crÃ­ticos
+      checkCriticalStates();
+    }
+
+    function checkCriticalStates() {
+      // Salud crÃ­tica (menor a 10%)
+      if(playerStats.salud < 10) {
+        showAlert('â¤ï¸ Salud CrÃ­tica', 
+          'Tu salud estÃ¡ muy baja. Ve al hospital o usa un botiquÃ­n inmediatamente.',
+          'Ir al Hospital', 
+          () => {
+            playerStats.salud = Math.min(100, playerStats.salud + 50);
+            // AquÃ­ irÃ­a la lÃ³gica de pago
+            showAlert('ðŸ¥ Hospital', 'Te han atendido. Salud restaurada parcialmente.', null, null);
+            updateStatBars();
+          }
+        );
+      }
+
+      // Conocimiento muy bajo (menor a 25%)
+      if(playerStats.conocimiento < 25) {
+        showAlert('ðŸ§  Conocimiento Bajo', 
+          'Tu conocimiento estÃ¡ muy bajo. No podrÃ¡s resolver problemas ni avanzar en la historia.',
+          'Estudiar Ahora',
+          () => {
+            estudiar();
+            closeAlert();
+          }
+        );
+      }
+
+      // Estamina agotada
+      if(playerStats.estamina < 5) {
+        showAlert('ðŸ’ª Sin Estamina', 
+          'EstÃ¡s agotado. Necesitas descansar o tomar algo energÃ©tico.',
+          'Descansar',
+          () => {
+            dormir();
+            closeAlert();
+          }
+        );
+      }
+    }
+
+    // ===== SISTEMA DE RELACIONES ENTRE BARRAS =====
+    function applyStatRelations(changedStat, changeAmount) {
+      const isIncrease = changeAmount > 0;
+      
+      switch(changedStat) {
+        case 'salud':
+          if(isIncrease) {
+            // Si salud aumenta
+            playerStats.agilidad += (changeAmount * 3 / 15); // 3% por cada 15%
+            playerStats.estamina += (changeAmount * 7 / 15);  // 7% por cada 15%
+            playerStats.sueno -= (changeAmount * 10 / 25);    // baja sueÃ±o 10% por cada 25%
+          } else {
+            // Si salud baja
+            playerStats.conocimiento += (changeAmount * 9 / 20); // baja 9% por cada 20%
+            playerStats.agilidad += (changeAmount * 13 / 20);    // baja 13% por cada 20%
+            playerStats.estamina += (changeAmount * 15 / 20);    // baja 15% por cada 20%
+            playerStats.sueno -= (changeAmount * 10 / 25);       // aumenta sueÃ±o 10% por cada 25%
+          }
+          break;
+
+        case 'conocimiento':
+          if(isIncrease) {
+            // Si conocimiento aumenta
+            playerStats.agilidad -= (changeAmount * 15 / 35);  // baja 15% por cada 35%
+            playerStats.estamina -= (changeAmount * 15 / 35);  // baja 15% por cada 35%
+            playerStats.suerte += (changeAmount * 2 / 30);     // aumenta 2% por cada 30%
+            playerStats.sueno -= (changeAmount * 20 / 40);     // aumenta ganas de dormir 20% por cada 40%
+          } else {
+            // Si conocimiento baja
+            playerStats.salud += (changeAmount * 20 / 35);     // baja salud 20% por cada 35%
+          }
+          break;
+
+        case 'agilidad':
+          if(isIncrease) {
+            playerStats.estamina -= (changeAmount * 7 / 30);   // baja 7% por cada 30%
+          } else {
+            playerStats.estamina -= (changeAmount * 5 / 15);   // aumenta 5% por cada 15%
+          }
+          break;
+
+        case 'estamina':
+          if(isIncrease) {
+            playerStats.agilidad -= (changeAmount * 5 / 25);   // baja 5% por cada 25%
+          } else {
+            playerStats.estamina -= (changeAmount * 5 / 20);   // aumenta 5% por cada 20% (corregido)
+          }
+          break;
+      }
+
+      // Asegurar que ninguna barra se salga de los lÃ­mites
+      Object.keys(playerStats).forEach(stat => {
+        playerStats[stat] = Math.max(0, Math.min(100, playerStats[stat]));
+      });
+    }
+
+    function modifyStat(stat, amount, activity) {
+      const oldValue = playerStats[stat];
+      playerStats[stat] = Math.max(0, Math.min(100, playerStats[stat] + amount));
+      
+      const actualChange = playerStats[stat] - oldValue;
+      
+      // Aplicar relaciones entre barras
+      applyStatRelations(stat, actualChange);
+      
+      // Actualizar tiempo de Ãºltima actividad
+      lastActivityTime = gameTime;
+      document.getElementById('lastActivity').textContent = activity;
+      
+      updateStatBars();
+    }
+
+    // ===== ACCIONES DEL JUGADOR =====
+    function estudiar() {
+      if(playerStats.estamina < 15) {
+        showAlert('ðŸ’ª Sin EnergÃ­a', 'No tienes suficiente estamina para estudiar.', null, null);
+        return;
+      }
+      
+      modifyStat('conocimiento', 25, 'Estudiar');
+      modifyStat('estamina', -15, 'Estudiar');
+      
+      showAlert('ðŸ“š Estudiando', 'Has estudiado. Tu conocimiento aumenta pero tu estamina disminuye.', null, null);
+    }
+
+    function jugarVideojuegos() {
+      if(playerStats.estamina < 10) {
+        showAlert('ðŸ’ª Sin EnergÃ­a', 'No tienes suficiente estamina para jugar.', null, null);
+        return;
+      }
+      
+      modifyStat('conocimiento', -10, 'Jugar videojuegos');
+      modifyStat('agilidad', 15, 'Jugar videojuegos');
+      modifyStat('estamina', -10, 'Jugar videojuegos');
+      
+      showAlert('ðŸŽ® Jugando', 'Has jugado videojuegos. Tu agilidad aumenta pero pierdes conocimiento y estamina.', null, null);
+    }
+
+    function dormir() {
+      modifyStat('estamina', 20, 'Dormir');
+      modifyStat('salud', 10, 'Dormir');
+      modifyStat('sueno', 30, 'Dormir'); // Reduce las ganas de dormir
+      
+      showAlert('ðŸ˜´ Durmiendo', 'Has descansado. Tu estamina y salud mejoran.', null, null);
+    }
+
+    function trabajar() {
+      if(playerStats.estamina < 20) {
+        showAlert('ðŸ’ª Sin EnergÃ­a', 'No tienes suficiente estamina para trabajar.', null, null);
+        return;
+      }
+      
+      modifyStat('agilidad', 20, 'Trabajar');
+      modifyStat('estamina', -20, 'Trabajar');
+      
+      showAlert('ðŸ’¼ Trabajando', 'Has trabajado. Tu agilidad mejora pero gastas estamina.', null, null);
+    }
+
+    function usarBotiquin() {
+      const botiquin = inventory.find(item => item.type === 'healing' && item.count > 0);
+      if(!botiquin) {
+        showAlert('âŒ Sin BotiquÃ­n', 'No tienes botiquines disponibles.', null, null);
+        return;
+      }
+      
+      modifyStat('salud', 30, 'Usar botiquÃ­n');
+      botiquin.count--;
+      
+      if(botiquin.count <= 0) {
+        const index = inventory.indexOf(botiquin);
+        inventory.splice(index, 1);
+      }
+      
+      updateInventoryDisplay();
+      showAlert('ðŸ¥ BotiquÃ­n Usado', 'Has usado un botiquÃ­n. Tu salud mejora.', null, null);
+    }
+
+    function tomarEnergetico() {
+      const energetico = inventory.find(item => item.type === 'energy' && item.count > 0);
+      if(!energetico) {
+        showAlert('âŒ Sin EnergÃ©tico', 'No tienes energÃ©ticos disponibles.', null, null);
+        return;
+      }
+      
+      modifyStat('estamina', 15, 'Tomar energÃ©tico');
+      modifyStat('salud', -15, 'Tomar energÃ©tico'); // Los energÃ©ticos bajan la salud
+      modifyStat('agilidad', 25, 'Tomar energÃ©tico'); // Boost temporal de agilidad
+      
+      energetico.count--;
+      
+      if(energetico.count <= 0) {
+        const index = inventory.indexOf(energetico);
+        inventory.splice(index, 1);
+      }
+      
+      updateInventoryDisplay();
+      showAlert('âš¡ EnergÃ©tico', 'Has tomado un energÃ©tico. MÃ¡s estamina y agilidad, pero menos salud.', null, null);
+    }
+
+    // ===== SISTEMA DE DEGRADACIÃ“N AUTOMÃTICA =====
+    function autoDegrade() {
+      gameTime++;
+      
+      // Cada 2 minutos (120 segundos) sin actividad, reduce estamina
+      if(gameTime - lastActivityTime >= 120) {
+        playerStats.estamina = Math.max(0, playerStats.estamina - 3);
+        lastActivityTime = gameTime; // Resetear para evitar degradaciÃ³n continua
+      }
+      
+      // Cada 2.5 minutos reduce sueÃ±o (aumenta ganas de dormir)
+      if(gameTime % 150 === 0) {
+        playerStats.sueno = Math.max(0, playerStats.sueno - 5);
+      }
+      
+      // Suerte cambia aleatoriamente cada cierto tiempo
+      if(gameTime % 180 === 0) {
+        playerStats.suerte = Math.random() * 100;
+      }
+      
+      updateStatBars();
+      document.getElementById('gameTime').textContent = gameTime;
+      document.getElementById('gameStateDebug').textContent = gameState;
+    }
+
+    // ===== SISTEMA DE INVENTARIO =====
+    function updateInventoryDisplay() {
+      const grid = document.getElementById('inventoryGrid');
+      grid.innerHTML = '';
+      
+      // Crear 18 slots (6x3)
+      for(let i = 0; i < 18; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'inventory-slot empty';
+        
+        if(i < inventory.length) {
+          const item = inventory[i];
+          slot.className = 'inventory-slot';
+          slot.style.background = item.color;
+          slot.innerHTML = `<div style="font-size:10px;color:#fff;text-align:center;font-weight:bold;">${item.name}<br>x${item.count}</div>`;
+        }
+        
+        grid.appendChild(slot);
+      }
+      
+      document.getElementById('itemCount').textContent = inventory.length;
+    }
+
+    function checkInteractions() {
+      for(let obj of roomObjects) {
+        const d = 25;
+        if(player.x < obj.x + obj.width + d && 
+           player.x + player.width > obj.x - d && 
+           player.y < obj.y + obj.height + d && 
+           player.y + player.height > obj.y - d) {
+          
+          if(obj.type === 'desk') {
+            // Escritorio - estudiar
+            estudiar();
+          } else if(obj.type === 'nightstand') {
+            // Mesa de noche - jugar videojuegos
+            jugarVideojuegos();
+          } else if(obj.type === 'bed') {
+            // Cama - dormir
+            dormir();
+          } else if(obj.type === 'wardrobe') {
+            // Armario - abrir inventario
+            openInventory();
+          } else {
+            // Otras interacciones genÃ©ricas
+            showAlert('ðŸ” InteracciÃ³n', `Has interactuado con: ${obj.name}`, null, null);
+          }
+          break;
+        }
+      }
+      
+      // Si no hay objeto cerca, abrir inventario
+      if(!isNearObject()) {
+        openInventory();
+      }
+    }
+
+    function isNearObject() {
+      for(let obj of roomObjects) {
+        const d = 25;
+        if(player.x < obj.x + obj.width + d && 
+           player.x + player.width > obj.x - d && 
+           player.y < obj.y + obj.height + d && 
+           player.y + player.height > obj.y - d) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function openInventory() {
+      gameState = 'inventory';
+      document.getElementById('inventoryModal').style.display = 'block';
+      updateInventoryDisplay();
+      updateStatBars();
+    }
+
+    function closeInventory() {
+      document.getElementById('inventoryModal').style.display = 'none';
+      gameState = 'playing';
+    }
+
+    // ===== SISTEMA DE ALERTAS =====
+    function showAlert(title, message, actionText, actionCallback) {
+      document.getElementById('alertTitle').textContent = title;
+      document.getElementById('alertMessage').textContent = message;
+      
+      const actionBtn = document.getElementById('alertActionBtn');
+      if(actionText && actionCallback) {
+        actionBtn.textContent = actionText;
+        actionBtn.style.display = 'inline-block';
+        actionBtn.onclick = actionCallback;
+      } else {
+        actionBtn.style.display = 'none';
+      }
+      
+      document.getElementById('alertOverlay').style.display = 'flex';
+    }
+
+    function closeAlert() {
+      document.getElementById('alertOverlay').style.display = 'none';
+    }
+
+    function handleAlertAction() {
+      // Esta funciÃ³n se redefine dinÃ¡micamente en showAlert
+    }
+
+    // ===== SISTEMA DE MOVIMIENTO =====
+    function updatePlayer() {
+      let dx = 0, dy = 0;
+      
+      // Velocidad basada en agilidad
+      const speedMultiplier = Math.max(0.5, playerStats.agilidad / 100);
+      const currentSpeed = player.speed * speedMultiplier;
+      
+      if(keys['w'] || keys['arrowup']) { dy -= currentSpeed; player.facing = 'up'; }
+      if(keys['s'] || keys['arrowdown']) { dy += currentSpeed; player.facing = 'down'; }
+      if(keys['a'] || keys['arrowleft']) { dx -= currentSpeed; player.facing = 'left'; }
+      if(keys['d'] || keys['arrowright']) { dx += currentSpeed; player.facing = 'right'; }
+      
+      if(dx !== 0) {
+        const nx = player.x + dx;
+        const withinX = nx >= WALL + 5 && nx <= ROOM_SIZE - player.width - WALL - 5;
+        if(withinX && !willCollideAt(nx, player.y)) {
+          player.x = nx;
+        }
+      }
+      
+      if(dy !== 0) {
+        const ny = player.y + dy;
+        const withinY = ny >= WALL + 5 && ny <= ROOM_SIZE - player.height - WALL - 5;
+        if(withinY && !willCollideAt(player.x, ny)) {
+          player.y = ny;
+        }
+      }
+    }
+
+    // ===== SISTEMA DE COLISIONES =====
+    function rectsIntersect(a, b) {
+      return a.x < b.x + b.width && 
+             a.x + a.width > b.x && 
+             a.y < b.y + b.height && 
+             a.y + a.height > b.y;
+    }
+
+    function willCollideAt(nx, ny) {
+      const test = {x: nx, y: ny, width: player.width, height: player.height};
+      const pad = 2;
+      
+      for(let obj of roomObjects) {
+        const r = {
+          x: obj.x - pad,
+          y: obj.y - pad,
+          width: obj.width + pad * 2,
+          height: obj.height + pad * 2
+        };
+        if(rectsIntersect(test, r)) return true;
+      }
+      return false;
+    }
+
+    // ===== SISTEMA DE RENDERIZADO =====
+    function drawWallsIso() {
+      ctx.fillStyle = '#d8c3a2';
+      ctx.fillRect(0, 0, ROOM_SIZE, WALL);
+      ctx.fillStyle = '#8b7355';
+      ctx.fillRect(0, WALL - 4, ROOM_SIZE, 4);
+      
+      const g1 = ctx.createLinearGradient(0, 0, WALL, 0);
+      g1.addColorStop(0, '#d2b48c');
+      g1.addColorStop(1, '#c09e74');
+      ctx.fillStyle = g1;
+      ctx.fillRect(0, 0, WALL, ROOM_SIZE);
+      
+      const g2 = ctx.createLinearGradient(0, 0, 1, 0);
+      g2.addColorStop(0, '#c6a67d');
+      g2.addColorStop(1, '#b28f66');
+      ctx.fillStyle = g2;
+      ctx.fillRect(ROOM_SIZE - WALL, 0, WALL, ROOM_SIZE);
+      
+      const g3 = ctx.createLinearGradient(0, ROOM_SIZE - WALL, 0, ROOM_SIZE);
+      g3.addColorStop(0, '#c6a67d');
+      g3.addColorStop(1, '#b28f66');
+      ctx.fillStyle = g3;
+      ctx.fillRect(0, ROOM_SIZE - WALL, ROOM_SIZE, WALL);
+    }
+
+    function isoFloor() {
+      const rows = 8, cols = 8;
+      const originX = ROOM_SIZE / 2, originY = 140;
+      
+      for(let r = 0; r < rows; r++) {
+        for(let c = 0; c < cols; c++) {
+          const x = originX + (c - r) * (64 / 2);
+          const y = originY + (c + r) * (32 / 2);
+          drawDiamond(x, y, 64, 32, (r + c) % 2 === 0 ? '#b98b60' : '#a87b50');
+          
+          ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+          ctx.beginPath();
+          ctx.moveTo(x, y - 16);
+          ctx.lineTo(x + 32, y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    function drawDiamond(cx, cy, w, h, fill) {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - h/2);
+      ctx.lineTo(cx + w/2, cy);
+      ctx.lineTo(cx, cy + h/2);
+      ctx.lineTo(cx - w/2, cy);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawObjectShadow(obj) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      const cx = obj.x + obj.width/2;
+      const cy = obj.y + obj.height - 4;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, obj.width * 0.6, Math.max(6, obj.height * 0.12), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawBed(o) {
+      drawObjectShadow(o);
+      ctx.fillStyle = '#6d4b2b';
+      ctx.fillRect(o.x, o.y, o.width, o.height);
+      ctx.fillStyle = '#f0ead6';
+      ctx.fillRect(o.x + 4, o.y + 4, o.width - 8, o.height - 12);
+      ctx.fillStyle = '#8aaee0';
+      ctx.fillRect(o.x + 6, o.y + o.height - 26, o.width - 12, 22);
+      ctx.fillStyle = '#3f2b18';
+      ctx.fillRect(o.x - 4, o.y - 8, o.width + 8, 10);
+      ctx.fillRect(o.x - 4, o.y + o.height - 4, o.width + 8, 8);
+    }
+
+    function drawWardrobe(o) {
+      drawObjectShadow(o);
+      ctx.fillStyle = '#5D4037';
+      ctx.fillRect(o.x, o.y, o.width, o.height);
+      ctx.fillStyle = '#8D6E63';
+      ctx.fillRect(o.x + 3, o.y + 8, (o.width - 6) / 2, o.height - 16);
+      ctx.fillStyle = '#7D5E52';
+      ctx.fillRect(o.x + 3 + (o.width - 6) / 2, o.y + 8, (o.width - 6) / 2, o.height - 16);
+      ctx.fillStyle = '#FFD700';
+      ctx.fillRect(o.x + (o.width / 2) - 10, o.y + o.height / 2, 4, 8);
+      ctx.fillRect(o.x + (o.width / 2) + 6, o.y + o.height / 2, 4, 8);
+    }
+
+    function drawDesk(o) {
+      drawObjectShadow(o);
+      ctx.fillStyle = '#8B4513';
+      ctx.fillRect(o.x, o.y, o.width, o.height);
+      ctx.fillStyle = '#CD853F';
+      ctx.fillRect(o.x + 6, o.y + 6, o.width - 12, o.height - 12);
+      ctx.fillStyle = '#a8733d';
+      ctx.fillRect(o.x + 8, o.y + 14, 34, 20);
+      ctx.fillRect(o.x + 50, o.y + 14, 34, 20);
+    }
+
+    function drawNightstand(o) {
+      drawObjectShadow(o);
+      ctx.fillStyle = '#8B4513';
+      ctx.fillRect(o.x, o.y, o.width, o.height);
+      ctx.fillStyle = '#CD853F';
+      ctx.fillRect(o.x + 3, o.y + 12, o.width - 6, 15);
+      
+      // TelÃ©fono en mesa de noche
+      ctx.fillStyle = '#333';
+      ctx.fillRect(o.x + 8, o.y + 8, 12, 8);
+      ctx.fillStyle = '#555';
+      ctx.fillRect(o.x + 9, o.y + 9, 10, 6);
+    }
+
+    function drawPicture(o) {
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.fillRect(o.x + 2, o.y + 2, o.width, o.height);
+      ctx.fillStyle = '#8B4513';
+      ctx.fillRect(o.x, o.y, o.width, o.height);
+      ctx.fillStyle = '#A0522D';
+      ctx.fillRect(o.x + 4, o.y + 4, o.width - 8, o.height - 8);
+      ctx.fillStyle = '#87CEEB';
+      ctx.fillRect(o.x + 8, o.y + 8, o.width - 16, o.height - 16);
+    }
+
+    function drawDoor(o) {
+      ctx.fillStyle = '#654321';
+      ctx.fillRect(o.x - 6, o.y - 6, o.width + 12, o.height + 12);
+      ctx.fillStyle = '#8B4513';
+      ctx.fillRect(o.x, o.y, o.width, o.height);
+      ctx.fillStyle = '#FFD700';
+      ctx.fillRect(o.x + o.width + 1, o.y + o.height / 2 - 4, 6, 8);
+    }
+
+    function drawPlayer() {
+      // Sombra del jugador
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(player.x + 2, player.y + player.height - 2, player.width - 4, 6);
+      
+      // Sprite bÃ¡sico del jugador (Alex)
+      ctx.fillStyle = '#F1C27D'; // Piel
+      ctx.fillRect(player.x + 7, player.y, 14, 12); // Cabeza
+      
+      ctx.fillStyle = '#2F1B14'; // Cabello
+      ctx.fillRect(player.x + 6, player.y - 2, 16, 8);
+      
+      // Ojos
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(player.x + 10, player.y + 4, 3, 2);
+      ctx.fillRect(player.x + 15, player.y + 4, 3, 2);
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(player.x + 11, player.y + 4, 1, 1);
+      ctx.fillRect(player.x + 16, player.y + 4, 1, 1);
+      
+      // Boca
+      ctx.fillStyle = '#652d2d';
+      ctx.fillRect(player.x + 12, player.y + 8, 4, 1);
+      
+      // Cuerpo
+      ctx.fillStyle = '#4169E1'; // Camisa azul
+      ctx.fillRect(player.x + 6, player.y + 12, 16, 12);
+      
+      // Brazos
+      ctx.fillStyle = '#4169E1'; // Manga
+      ctx.fillRect(player.x + 1, player.y + 12, 6, 6);
+      ctx.fillRect(player.x + 21, player.y + 12, 6, 6);
+      ctx.fillStyle = '#F1C27D'; // Piel brazos
+      ctx.fillRect(player.x + 1, player.y + 18, 6, 6);
+      ctx.fillRect(player.x + 21, player.y + 18, 6, 6);
+      
+      // PantalÃ³n
+      ctx.fillStyle = '#000080';
+      ctx.fillRect(player.x + 7, player.y + 24, 14, 8);
+      
+      // Zapatos
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(player.x + 5, player.y + 32, 8, 4);
+      ctx.fillRect(player.x + 15, player.y + 32, 8, 4);
+      
+      // Indicador de estamina sobre el jugador
+      if(playerStats.estamina < 30) {
+        ctx.fillStyle = playerStats.estamina < 10 ? '#ff4444' : '#ffaa44';
+        ctx.font = '12px Courier New';
+        ctx.fillText('ðŸ’¤', player.x + player.width/2 - 6, player.y - 5);
+      }
+    }
+
+    function drawScene() {
+      drawWallsIso();
+      isoFloor();
+      
+      // Lista de objetos para ordenar por profundidad
+      const list = roomObjects.map(o => ({kind: 'obj', it: o, key: o.y + o.height}));
+      list.push({kind: 'player', it: player, key: player.y + player.height});
+      list.sort((a, b) => a.key - b.key);
+      
+      for(let e of list) {
+        if(e.kind === 'obj') {
+          switch(e.it.type) {
+            case 'bed': drawBed(e.it); break;
+            case 'wardrobe': drawWardrobe(e.it); break;
+            case 'desk': drawDesk(e.it); break;
+            case 'nightstand': drawNightstand(e.it); break;
+            case 'picture': drawPicture(e.it); break;
+            case 'door': drawDoor(e.it); break;
+          }
+        } else {
+          drawPlayer();
+        }
+      }
+      
+      // Bocadillos de ayuda
+      if(gameState === 'playing') {
+        for(let obj of roomObjects) {
+          const d = 25;
+          if(player.x < obj.x + obj.width + d && 
+             player.x + player.width > obj.x - d && 
+             player.y < obj.y + obj.height + d && 
+             player.y + player.height > obj.y - d) {
+            
+            const bx = Math.max(10, Math.min(ROOM_SIZE - 110, player.x + player.width/2 - 50));
+            const by = player.y - 28;
+            
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.fillRect(bx + 2, by + 2, 110, 22);
+            ctx.fillStyle = 'rgba(255,224,138,0.95)';
+            ctx.fillRect(bx, by, 110, 22);
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 10px Courier New';
+            
+            let actionText = 'E â€” ' + obj.name;
+            if(obj.type === 'desk') actionText = 'E â€” ðŸ“š Estudiar';
+            else if(obj.type === 'nightstand') actionText = 'E â€” ðŸŽ® Jugar';
+            else if(obj.type === 'bed') actionText = 'E â€” ðŸ˜´ Dormir';
+            else if(obj.type === 'wardrobe') actionText = 'E â€” ðŸ“Š Estado';
+            
+            ctx.fillText(actionText, bx + 6, by + 14);
+          }
+        }
+      }
+    }
+
+    // ===== LOOP PRINCIPAL =====
+    function gameLoop() {
+      if(gameState === 'playing') {
+        updatePlayer();
+      }
+      
+      ctx.clearRect(0, 0, ROOM_SIZE, ROOM_SIZE);
+      drawScene();
+      
+      requestAnimationFrame(gameLoop);
+    }
+
+    // ===== INICIALIZACIÃ“N =====
+    function init() {
+      updateStatBars();
+      updateInventoryDisplay();
+      gameLoop();
+      
+      // Timer para degradaciÃ³n automÃ¡tica cada segundo
+      setInterval(autoDegrade, 1000);
+      
+      console.log('ðŸŽ® CoopPlay iniciado correctamente');
+      console.log('ðŸ“Š Sistema de barras de estado activado');
+      console.log('ðŸŽ¯ Presiona E para abrir el inventario/estado');
+    }
+
+    // Iniciar el juego cuando la pÃ¡gina carga
+    window.addEventListener('load', init);
+  </script>
+</body>
+</html>
